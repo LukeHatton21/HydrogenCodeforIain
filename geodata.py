@@ -5,7 +5,7 @@ import geopandas as gpd
 from shapely.geometry import Point
 import matplotlib.pyplot as plt
 import numpy as np
-import cartopy.crs as ccrs
+# import cartopy.crs as ccrs
 from scipy.spatial.distance import cdist
 import regionmask
 
@@ -74,7 +74,7 @@ class Global_Data:
         countries_output = xr.Dataset(data_vars=data_vars, coords=coords)
 
         # Plot data
-        self.plot_data(countries_output) 
+        # self.plot_data(countries_output) 
         
         return countries_output
 

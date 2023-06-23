@@ -4,7 +4,7 @@ import glob
 import pandas as pd
 import pvlib
 import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
+# import cartopy.crs as ccrs
 
 
 
@@ -306,7 +306,7 @@ class Economic_Profile:
         wind_turbine_costs = self.wind_capex * self.renewables_capacity * self.percentage_wind
         transmission_costs = transmission_costs_unit * self.renewables_capacity * self.percentage_wind
         total_costs = foundation_costs + transmission_costs + wind_turbine_costs
-        self.plot_data(total_costs, "Total Capital Costs")
+        # self.plot_data(total_costs, "Total Capital Costs")
 
         # Save a capital cost for each location (lat/lon) and return this for use in the calculations
         data_vars = {'total capital costs': total_costs, 'foundation costs': foundation_costs, 

@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 import time
 import csv
-import cartopy.crs as ccrs
+# import cartopy.crs as ccrs
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -156,9 +156,9 @@ class HydrogenModel:
         # Map the individual costs
         print("Calculating the Levelised Cost of Hydrogen")
         print("Discounted Costs Mapping")
-        self.plot_data(discounted_costs_sum.values, discounted_costs_sum.latitude.values, discounted_costs_sum.longitude.values, "Discounted Costs" )
+        # self.plot_data(discounted_costs_sum.values, discounted_costs_sum.latitude.values, discounted_costs_sum.longitude.values, "Discounted Costs" )
         print("Discounted Hydrogen Production Mapping")
-        self.plot_data(hydrogen_produced_sum.values, discounted_costs_sum.latitude.values, discounted_costs_sum.longitude.values, "Discounted Hydrogen Production" )
+        # self.plot_data(hydrogen_produced_sum.values, discounted_costs_sum.latitude.values, discounted_costs_sum.longitude.values, "Discounted Hydrogen Production" )
         
         
         return levelised_cost, annual_hydrogen
@@ -302,7 +302,7 @@ class HydrogenModel:
         # Print combined results for onshore and offshore
         print("Results for all locations:")
         self.print_info_from_results(costs)
-        self.plot_data(costs, latitudes, longitudes, "LCOH (USD/kg), all locations", "all_locations_lcoh_", 1)
+        # self.plot_data(costs, latitudes, longitudes, "LCOH (USD/kg), all locations", "all_locations_lcoh_", 1)
         
     
  
@@ -685,21 +685,29 @@ class HydrogenModel:
 
 ## OUTPUTS ##
 
-
+#### FOR LUKE
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
 renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_WIND_CF/"
 input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
 output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
+
+#### FOR IAIN
+# Specify Paths to Input Data, Renewables Profiles and Location for the Output File
+renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_WIND_CF/"
+input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
+output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
     
 # Record start time
 start_time = time.time()
 
 
 # Read in the renewable profile dataset from files provided by Iain
-all_files_class = All_Files(lat_lon=[48, 62, -10, 2])
-files_provided, years = all_files_class.preprocess_combine_monthly("Override")
-new_files_class = All_Files(lat_lon=[48, 62, -10, 2], filepath=renewable_profiles_path, name_format="WIND_CF.")
-files_provided_test, years_test = new_files_class.preprocess_combine_yearly()
+#### UK
+all_files_class = All_Files(lat_lon=[48, 62, -10, 2], filepath=renewable_profiles_path, name_format="WIND_CF.")
+
+#### GLOBAL
+all_files_class = All_Files(lat_lon=[-90, 90, -180, 180], filepath=renewable_profiles_path, name_format="WIND_CF.")
+files_provided, years = all_files_class.preprocess_combine_yearly()
 renewable_profile_array = files_provided['CF'] 
 print("Files from Renewables Ninja read in, corrected and combined")
 
@@ -720,7 +728,7 @@ model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=year
 # Get timestamp
 time_stamp = time.time()
 date_time = datetime.fromtimestamp(time_stamp)
-str_date_time = date_time.strftime("%d-%m-%Y-%H:%M:%S")
+str_date_time = date_time.strftime("%d-%m-%Y-%H-%M-%S")
 start_year = years[0]
 end_year = years[-1]
 years_str = str(start_year) + '_' + str(end_year)
