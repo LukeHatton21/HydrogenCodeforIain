@@ -1,0 +1,9 @@
+Parameter,Value
+elec_capex,1200
+elec_op_cost,0.02
+electrolyser_capacity,20000
+efficiency,0.7
+electrolyser_type,PEM
+elec_discount_rate,0.1
+temperature, 100
+pressure, 30
