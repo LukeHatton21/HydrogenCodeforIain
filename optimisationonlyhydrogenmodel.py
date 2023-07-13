@@ -42,7 +42,8 @@ class HydrogenModel:
                                                               renewable_op_cost, wind_capex, renewables_data=dataset,lifetime=None)
         self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), dataset)
         self.geodata = self.geodata_class.get_all_data_variables()
-        self.renewables_data = dataset
+        self.renewables_raw_data = dataset
+        self.renewables_data, self.high_seas = self.remove_high_seas()
         self.electrolyser_capacity = self.economic_profile_class.electrolyser_capacity
         self.electrolyser_class.elec_capacity_array = xr.zeros_like(dataset) + self.electrolyser_capacity
         self.discount_rate = discount_rate
@@ -52,7 +53,20 @@ class HydrogenModel:
         self.country_wacc_mapping = pd.read_csv((data_path + "new_country_waccs.csv"))
         self.country_data = xr.open_dataset((data_path + "country_grids.nc"))
         print("Setting up the Hydrogen Model Class")
-
+        
+        
+    def remove_high_seas(self):
+        
+        nan_mask_sea = xr.where(np.isnan(self.geodata['sea']), True, False)
+        print(nan_mask_sea)
+        nan_mask_land = xr.where(np.isnan(self.geodata['land']), True, False)
+        print(nan_mask_land)
+        combined_nan_mask = nan_mask_sea & nan_mask_land
+        masked_renewables = self.renewables_raw_data.where(combined_nan_mask==False, drop=True)
+        print(masked_renewables)
+        return masked_renewables, combined_nan_mask
+    
+    
             
     def parameters_from_csv(self, file_path, class_name):
         try:
@@ -96,6 +110,7 @@ class HydrogenModel:
             renewables_profile = self.renewables_data * self.renewables_capacity
         else: 
             renewables_profile = renewables_data * self.renewables_capacity
+        print(renewables_profile)
         print("Calculating the hydrogen output at an hourly resolution")
         electrolyser_yearly_output = self.electrolyser_class.calculate_yearly_output(renewables_profile, self.electrolyser_capacity)
         print(electrolyser_yearly_output)
@@ -154,7 +169,8 @@ class HydrogenModel:
         
         # Calculate the levelised costs, filtering to account for the locations that are too far from the shoreline
         levelised_cost_raw = np.divide(discounted_costs_sum, hydrogen_produced_sum)
-        levelised_cost = xr.where(levelised_cost_raw == 0, np.nan, levelised_cost_raw)
+        levelised_cost_adj = xr.where(levelised_cost_raw == 0, np.nan, levelised_cost_raw)
+        levelised_cost = xr.where(self.high_seas == True, np.nan, levelised_cost_adj)
         
         # Print time taken to run
         end_time = time.time()
@@ -811,7 +827,8 @@ class HydrogenModel:
         
         # Calculate the levelised costs, filtering to account for the locations that are too far from the shoreline
         levelised_cost_raw = np.divide(discounted_costs_sum, hydrogen_produced_sum)
-        levelised_cost = xr.where(levelised_cost_raw == 0, np.nan, levelised_cost_raw)
+        levelised_cost_adj = xr.where(levelised_cost_raw == 0, np.nan, levelised_cost_raw)
+        levelised_cost = xr.where(self.high_seas == True, np.nan, levelised_cost_adj)
         
         # Create dataset with results
         data_vars = {'levelised_cost': levelised_cost,
@@ -854,20 +871,18 @@ class HydrogenModel:
 ## CONSTRAINTS ##
 
 
-## OUTPUTS ##
-
 #### FOR IAIN
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
-input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
-output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
+#renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
+#input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
+#output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 
 ### FOR LUKE
 
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-#renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
-#input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
-#output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
+renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
+input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
+output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
     
 # Record start time
 start_time = time.time()
@@ -890,7 +905,7 @@ model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=year
 # Calculate the levelised cost
 combined_results = model.global_optimisation_parallelised()
 print("SciPy BasinHopping finished running")
-model.save_optimisation_results(output_folder, combined_results, "FullGlobeOptimisedResults")
+model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
 opt_levelised_costs = combined_results['levelised_cost']
 opt_annual_production = combined_results['hydrogen_production']
 model.print_results_separately(opt_levelised_costs)
@@ -903,6 +918,13 @@ elapsed_time = end_time - start_time
 
 # Print elapsed time in seconds
 print(f"Model took {elapsed_time:.2f} seconds to run")
+
+    
+    
+
+    
+    
+    
 
     
 
