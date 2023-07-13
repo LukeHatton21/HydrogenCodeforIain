@@ -858,7 +858,7 @@ class HydrogenModel:
 
 #### FOR IAIN
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_WIND_CF/"
+renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
 input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
 output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 
