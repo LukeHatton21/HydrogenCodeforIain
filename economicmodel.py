@@ -4,15 +4,14 @@ import glob
 import pandas as pd
 import pvlib
 import matplotlib.pyplot as plt
-# import cartopy.crs as ccrs
+import cartopy.crs as ccrs
 
 
 
 class Economic_Profile:
     " Class to generate/store the renewables profile from a weather profile (if supplied) and calculate the discounted costings relating to the renewables and electrolyser components "
-    def __init__(self, renewables_capacity, percentage_wind, renew_op_cost, wind_capex, solar_capex=None, renewables_data = None, renew_discount_rate=None, 
-                 lifetime=None, land_foundations = None, geodata = None, electrolyser_capacity = None, turbine_rating=None, turbine_diameter=None, elec_capex=None, elec_op_cost=None):
-        """ Initialises the renewables_profile class
+    def __init__(self, renewables_capacity, percentage_wind, renew_op_cost, wind_capex, solar_capex=None, renewables_data = None, renew_discount_rate=None, lifetime=None, land_foundations = None, geodata = None, electrolyser_capacity = None, turbine_rating=None, turbine_diameter=None, elec_capex=None, elec_op_cost=None):
+        """ Initialises the renewables_profile class UPDATE THIS DESCRIPTION
        
         Required:
         Renewables_capacity - installed capacity of renewables (solar and wind), in kW
@@ -60,14 +59,14 @@ class Economic_Profile:
         
         if elec_op_cost is not None:
             self.elec_op_cost = elec_op_cost
-        
+
             
 
-    def get_foundation_cost(self, data):
+    def get_foundation_cost(self, geodata):
         """ Method to calculate the foundation cost for the wind turbine based on the depth of water, 
         using relationships from Bosch et al 2019 """
         
-        depth_data = data
+        depth_data = geodata['depth']
         
         # Set up relationships with depth
         a_parameter = [201, 114.24, 0]
@@ -89,9 +88,9 @@ class Economic_Profile:
             # Apply cost relationship where depth is greater than the cutoff depth and not NaN
             foundation_costs = xr.where((depth_data > cutoff_start) & (depth_data <= cutoff_end), a * depth_data ** 2 + b * depth_data + c, foundation_costs)
         
-        # Apply relationships for onshore (set foundation cost to zero) and offshore above the cutoff depth (>1000, N/A)
+        # Apply relationships for onshore (set foundation cost to input) and offshore above the cutoff depth (>1000, N/A)
         foundation_costs = foundation_costs / 1000  # convert all into USD/kW
-        foundation_costs = xr.where(depth_data < 0, self.land_foundations, foundation_costs)
+        foundation_costs = xr.where(geodata['offshore'] == True, foundation_costs, self.land_foundations)
         foundation_costs = xr.where(depth_data > 1000, np.nan, foundation_costs)
         
 
@@ -178,6 +177,7 @@ class Economic_Profile:
         # Calculate the onshore substation costs taken from https://guidetoanoffshorewindfarm.com/wind-farm-costs 
         # and including the offshore substation total cost + installation cost
         onshore_substation_cost = 55 * 1.25 * self.renewables_capacity
+        substation_cost = offshore_substation_cost + onshore_substation_cost
         
         # Calculate the interarray cable costs
         interarray_cable_costs = self.get_interarray_costs('AC')
@@ -187,9 +187,20 @@ class Economic_Profile:
         
         # Sum all costs relating to the configuration
         total_cost = offshore_substation_cost + onshore_substation_cost + interarray_cable_costs + transmission_costs
-        onshore_electrolysis_costs = xr.where(depth < 1000,  total_cost, np.nan)
+        onshore_total_costs = xr.where(depth < 1000,  total_cost, np.nan)
         
-        return onshore_electrolysis_costs
+        
+        # Create an xarray dataset
+        data_vars = {'pipeline_costs': xr.zeros_like(dist_data),
+        'transmission_costs': transmission_costs,
+        'interarray_costs': xr.full_like(dist_data, interarray_cable_costs),
+        'other_costs': xr.full_like(dist_data, substation_cost)}
+
+        coords = {'latitude': dist_data.latitude,'longitude': dist_data.longitude}
+
+        onshore_cost_breakdown = xr.Dataset(data_vars=data_vars, coords=coords)
+        
+        return onshore_total_costs, onshore_cost_breakdown
     
     def offshore_electrolysis(self, depth, dist_data):
         
@@ -201,21 +212,34 @@ class Economic_Profile:
         
         # Calculate the offshore substation costs taken from https://guidetoanoffshorewindfarm.com/wind-farm-costs 
         # and including the offshore substation total cost + installation cost
-        offshore_substation_costs = 155 * 1.25 * self.renewables_capacity + offshore_electrolysis_costs
+        offshore_substation_costs = 155 * 1.25 * self.renewables_capacity 
         
         # Calculate the cost of an offshore platform for electrolysis, which are taken from 
         # https://guidetoanoffshorewindfarm.com/wind-farm-costs as the cost for facilities and structure
         # of an offshore substation and the installation cost
-        offshore_platform_costs = 115 * 1.25 * self.electrolyser_capacity + offshore_electrolysis_costs
+        offshore_platform_costs = 115 * 1.25 * self.electrolyser_capacity 
         
         # Calculate the pipeline costs
         pipeline_costs = self.get_pipeline_cost(dist_data)
         
         # Sum all costs
         total_costs = interarray_cable_costs + offshore_substation_costs + offshore_platform_costs + pipeline_costs
-        offshore_electrolysis_costs = xr.where(depth < 1000, total_costs, np.nan)
+        offshore_total_costs = xr.where(depth < 1000, total_costs, np.nan)
+        offshore_costs = offshore_platform_costs + offshore_substation_costs
+        
+        # Create an xarray dataset
+        data_vars = {'pipeline_costs': pipeline_costs,
+        'tranmission_costs': xr.zeros_like(dist_data),
+        'interarray_costs': xr.full_like(dist_data, interarray_cable_costs),
+        'other_costs': xr.full_like(dist_data, offshore_costs)}
+        
+
+        coords = {'latitude': dist_data.latitude,'longitude': dist_data.longitude}
+
+        offshore_cost_breakdown = xr.Dataset(data_vars=data_vars, coords=coords)
+        
                                    
-        return offshore_electrolysis_costs
+        return offshore_total_costs, offshore_cost_breakdown
                                    
         
     def distributed_electrolysis(self, depth, dist_data):
@@ -234,7 +258,23 @@ class Economic_Profile:
         # Sum all costs
         total_costs = pipeline_costs + interarray_pipeline_costs + offshore_platform_costs
         distributed_costs = xr.where(depth < 1000, total_costs, np.nan)
-        return distributed_costs
+        
+        # Create an xarray dataset
+        data_vars = {'pipeline_costs': pipeline_costs,
+        'transmission_costs': xr.zeros_like(dist_data),
+        'interarray_costs': xr.full_like(dist_data, interarray_pipeline_costs),
+        'other_costs': xr.full_like(dist_data, offshore_platform_costs)}
+
+        coords = {'latitude': dist_data.latitude,'longitude': dist_data.longitude}
+
+        distributed_costs_breakdown = xr.Dataset(data_vars=data_vars, coords=coords)
+        
+        return distributed_costs, distributed_costs_breakdown
+        
+    
+
+        
+        
         
         
         
@@ -246,19 +286,32 @@ class Economic_Profile:
         offshore = geodata['offshore']
         
         # Use cost relationship with foundations and transmission
-        foundation_costs_unit = self.get_foundation_cost(depth)
+        foundation_costs_unit = self.get_foundation_cost(geodata)
         
         # Sum the costs of turbine, transmission and foundation
         turbine_foundation_costs = foundation_costs_unit * self.renewables_capacity * self.percentage_wind
         wind_turbine_costs = self.wind_capex * self.renewables_capacity * self.percentage_wind
         nonconfig_costs = turbine_foundation_costs + wind_turbine_costs
         
+        # Extract the total cost for each of the locations
+        onshore_config_cost, onshore_breakdown = self.onshore_electrolysis(depth, dist_data)
+        offshore_config_cost, offshore_breakdown = self.offshore_electrolysis(depth, dist_data)
+        dist_config_cost, dist_breakdown = self.distributed_electrolysis(depth, dist_data)
+        
+        
+        # Add the turbine and foundation costs to each configuration breakdown
+        onshore_breakdown['turbine_costs'] = xr.full_like(onshore_breakdown['pipeline_costs'], wind_turbine_costs)
+        onshore_breakdown['foundation_costs'] = turbine_foundation_costs
+        offshore_breakdown['turbine_costs'] = xr.full_like(onshore_breakdown['pipeline_costs'], wind_turbine_costs)
+        offshore_breakdown['foundation_costs'] = turbine_foundation_costs
+        dist_breakdown['turbine_costs'] = xr.full_like(onshore_breakdown['pipeline_costs'], wind_turbine_costs)
+        dist_breakdown['foundation_costs'] = turbine_foundation_costs
         
         # Calculate the cost for each of the configurations
         
-        onshore_electrolysis_cost = xr.where(offshore == True, self.onshore_electrolysis(depth, dist_data), 0)
-        offshore_electrolysis_cost = xr.where(offshore == True, self.offshore_electrolysis(depth, dist_data), 0)
-        distributed_electrolysis_cost = xr.where(offshore == True, self.distributed_electrolysis(depth, dist_data), 0)
+        onshore_electrolysis_cost = xr.where(offshore == True, onshore_config_cost, 0)
+        offshore_electrolysis_cost = xr.where(offshore == True, offshore_config_cost, 0)
+        distributed_electrolysis_cost = xr.where(offshore == True, dist_config_cost, 0)
         
             
         # Calculate total capital costs for each of the configurations
@@ -271,12 +324,15 @@ class Economic_Profile:
         storage_array = xr.zeros_like(dist_data)
         min_costs_initial = np.minimum(onshore_electrolysis_tc, offshore_electrolysis_tc)
         min_costs = np.minimum(min_costs_initial, distributed_electrolysis_tc)
-        storage_array = xr.where(min_costs == onshore_electrolysis_tc, 'On.',
-                            xr.where(min_costs == offshore_electrolysis_tc, 'Off.', 'Distr.'))
+        #storage_array = xr.where(min_costs == onshore_electrolysis_tc, 'On.',
+                            #xr.where(min_costs == offshore_electrolysis_tc, 'Off.', 'Distr.'))
+        storage_array = xr.where(min_costs == onshore_electrolysis_tc, 1,
+                            xr.where(min_costs == offshore_electrolysis_tc, 2, 3))
+        #breakdown = xr.where(min_costs == onshore_electrolysis_tc, onshore_breakdown, xr.where(min_costs == offshore_breakdown, 2, dist_breakdown))
+        #print(breakdown)
         #self.plot_data(min_costs, "Minimum Costs")
-        df = storage_array.to_dataframe(name='values')
-        #print(storage_array)
-        #print(df['values'].value_counts())
+        #self.plot_data(storage_array, "Configuration")
+        #df = storage_array.to_dataframe(name='values')
         
         # Create a dataset with the three possible capital expenditures 
         data_vars = {'minimum capital costs': min_costs, 'minimum cost configuration' : storage_array, 'onshore electrolysis': onshore_electrolysis_tc, 
@@ -294,11 +350,9 @@ class Economic_Profile:
     def calculate_capital_depth_distance(self, geodata):
         "Updates the cost of the wind farm for each location depending on the depth and distance to shore"
 
-        # Read geodata
-        #geodata = xr.open_dataset('Europe_geodata.nc')
 
         # Use cost relationship with foundations and transmission
-        foundation_costs_unit = self.get_foundation_cost(geodata['depth'])
+        foundation_costs_unit = self.get_foundation_cost(geodata)
         transmission_costs_unit = self.get_transmission_cost(geodata['distance'])
         
         # Sum the costs of turbine, transmission and foundation
@@ -306,7 +360,7 @@ class Economic_Profile:
         wind_turbine_costs = self.wind_capex * self.renewables_capacity * self.percentage_wind
         transmission_costs = transmission_costs_unit * self.renewables_capacity * self.percentage_wind
         total_costs = foundation_costs + transmission_costs + wind_turbine_costs
-        # self.plot_data(total_costs, "Total Capital Costs")
+        self.plot_data(total_costs, "Total Capital Costs")
 
         # Save a capital cost for each location (lat/lon) and return this for use in the calculations
         data_vars = {'total capital costs': total_costs, 'foundation costs': foundation_costs, 
@@ -437,7 +491,7 @@ class Economic_Profile:
             electrolyser_capacity = self.electrolyser_capacity
         
         # Adjust capital expenditure for electrolyser when offshore
-        capex_adjustment = xr.where(offshore_mask == True, 2, 1)
+        capex_adjustment = xr.where(offshore_mask == True, 1.5, 1)
         
         # Calculate locational capital expenditure relating to the electrolyser
         capital_cost = capex_adjustment * self.elec_capex * electrolyser_capacity
@@ -485,6 +539,7 @@ class Economic_Profile:
         # Calculate renewable capital costs using depth
         renew_config_costs = self.configuration_analysis(geodata)
         renew_capital_costs = renew_config_costs["minimum capital costs"]
+        offshore_config = renew_config_costs["minimum cost configuration"]
         
         # Calculate electrolyser capital costs
         elec_capital_costs = self.calculate_electrolyser_capex(geodata, capacity)
@@ -509,7 +564,8 @@ class Economic_Profile:
         data_vars = {'renewable_electricity': renewables_array,
                      'renewable costs': renew_costs_array,
                      'electrolyser costs': elec_costs_array,
-                     'total costs': total_costs_array}
+                     'total costs': total_costs_array,
+                     'configuration': offshore_config}
         coords = {'year': years_appended,
                   'latitude': latitudes,
                   'longitude': longitudes}

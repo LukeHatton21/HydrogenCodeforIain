@@ -1,16 +1,13 @@
 Parameter,Value
 elec_capex,1200
 elec_op_cost,0.02
-electrolyser_capacity,10000
-efficiency,0.7
-electrolyser_type,PEM
-elec_discount_rate,0.1
+electrolyser_capacity,17000
 renewables_capacity,20000
 renew_op_cost,0.01
 percentage_wind, 1
 wind_capex, 1500
 land_foundations, 115
-renew_discount_rate,0.05
+renew_discount_rate,0.10
 lifetime, 20
 turbine_diameter, 100
 turbine_rating, 10000
