@@ -624,8 +624,8 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores = -1  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=50, prefer="threads")(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        num_cores = 24  # Use all available CPU cores
+        parallel_results = Parallel(n_jobs=num_cores, verbose=50)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         
         
         # Extract the results
@@ -683,8 +683,8 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores = -1  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=50, prefer='threads')(delayed(self.levelised_cost_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        num_cores = 24  # Use all available CPU cores
+        parallel_results = Parallel(n_jobs=num_cores, verbose=50)(delayed(self.levelised_cost_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         print("Parallel processing completed")
         
         # Extract results
@@ -796,8 +796,8 @@ class HydrogenModel:
         discounted_renew_costs = self.country_wacc_discounts(renewables_costs_yearly)
         discounted_elec_costs = self.country_wacc_discounts(electrolyser_costs_yearly, 1)
         discounted_output = self.country_wacc_discounts(hydrogen_produced_yearly, 1)
-        if elec_print is not None:
-            print(f"Electrolyser Capacity: {elec_capacity} kW")
+        # if elec_print is not None:
+        #    print(f"Electrolyser Capacity: {elec_capacity} kW")
         discounted_costs = discounted_renew_costs + discounted_elec_costs
             
             
