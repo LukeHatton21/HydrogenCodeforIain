@@ -42,8 +42,8 @@ class HydrogenModel:
                                                               renewable_op_cost, wind_capex, renewables_data=dataset,lifetime=None)
         self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), dataset)
         self.geodata = self.geodata_class.get_all_data_variables()
-        self.renewables_raw_data = dataset
-        self.renewables_data, self.high_seas = self.remove_high_seas()
+        self.renewables_data = dataset
+        self.renewables_data_masked, self.high_seas = self.remove_high_seas()
         self.electrolyser_capacity = self.economic_profile_class.electrolyser_capacity
         self.electrolyser_class.elec_capacity_array = xr.zeros_like(dataset) + self.electrolyser_capacity
         self.discount_rate = discount_rate
@@ -62,7 +62,8 @@ class HydrogenModel:
         nan_mask_land = xr.where(np.isnan(self.geodata['land']), True, False)
         print(nan_mask_land)
         combined_nan_mask = nan_mask_sea & nan_mask_land
-        masked_renewables = self.renewables_raw_data.where(combined_nan_mask==False, drop=True)
+        print(combined_nan_mask)
+        masked_renewables = self.renewables_data.where(combined_nan_mask==False, drop=True)
         print(masked_renewables)
         return masked_renewables, combined_nan_mask
     
@@ -590,7 +591,22 @@ class HydrogenModel:
         renewables_gridpoint = renewables_gridpoint.transpose("time", "latitude", "longitude")
                     
         # Evaluate nature of gridpoint
-        offshore_status = self.geodata['offshore'].sel(longitude = lon, latitude=lat)      
+        offshore_status = self.geodata['offshore'].sel(longitude = lon, latitude=lat)   
+        
+        # Check if location is sea
+        if high_seas_status == True:
+            print("Located in the High Seas")
+            da = xr.DataArray(np.array([[np.nan]]), coords={'latitude': [lat], 'longitude': [lon]}, dims={'latitude', 'longitude'})
+            
+            data_vars = {'levelised_cost': da,
+                     'hydrogen_production': da,
+                     'electrolyser_capacity': da,
+                     'total_capital_costs': da,
+                     'configuration': da}
+            coords = {'latitude': lat,
+                  'longitude': lon}
+            high_seas_results = xr.Dataset(data_vars=data_vars, coords=coords)
+            return high_seas_results, np.nan
                     
         # Set up optimisation problem
         initial_guess = [self.electrolyser_capacity]
@@ -640,8 +656,8 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores = 24  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=50)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        num_cores = -1 #  # Use all available CPU cores
+        parallel_results = Parallel(n_jobs=num_cores, verbose=50, prefer="threads")(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         
         
         # Extract the results
@@ -699,8 +715,8 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores = 24  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=50)(delayed(self.levelised_cost_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        num_cores = -1 #24  # Use all available CPU cores
+        parallel_results = Parallel(n_jobs=num_cores, verbose=50, prefer="threads")(delayed(self.levelised_cost_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         print("Parallel processing completed")
         
         # Extract results
@@ -750,6 +766,25 @@ class HydrogenModel:
         
         loop_start = time.time()
         
+        
+        # Evaluate nature of gridpoint
+        high_seas_status = self.high_seas.sel(longitude=lon, latitude=lat)
+
+        # Check if location is sea
+        if high_seas_status == True:
+            da = xr.DataArray(np.array([[np.nan]]), coords={'latitude': [lat], 'longitude': [lon]}, dims={'latitude', 'longitude'})
+            
+            data_vars = {'levelised_cost': da,
+                     'hydrogen_production': da,
+                     'electrolyser_capacity': da,
+                     'total_capital_costs': da,
+                     'configuration': da}
+            coords = {'latitude': lat,
+                  'longitude': lon}
+            high_seas_results = xr.Dataset(data_vars=data_vars, coords=coords)
+            return high_seas_results, np.nan
+        
+        
         # Get renewables data at each gridpoint
         renewables_gridpoint = self.renewables_data.sel(longitude=lon, latitude=lat)
         renewables_gridpoint = renewables_gridpoint.expand_dims(latitude=[lat], longitude=[lon])
@@ -775,8 +810,6 @@ class HydrogenModel:
         # Setup variables stored in the Hydrogen Model Class
         lifetime = self.lifetime
         geodata = self.geodata.sel(latitude=latitude, longitude=longitude)
-        
-
         elec_capacity = int(capacity)
        
         
@@ -812,8 +845,8 @@ class HydrogenModel:
         discounted_renew_costs = self.country_wacc_discounts(renewables_costs_yearly)
         discounted_elec_costs = self.country_wacc_discounts(electrolyser_costs_yearly, 1)
         discounted_output = self.country_wacc_discounts(hydrogen_produced_yearly, 1)
-        # if elec_print is not None:
-        #    print(f"Electrolyser Capacity: {elec_capacity} kW")
+        if elec_print is not None:
+            print(f"Electrolyser Capacity: {elec_capacity} kW")
         discounted_costs = discounted_renew_costs + discounted_elec_costs
             
             
@@ -827,8 +860,7 @@ class HydrogenModel:
         
         # Calculate the levelised costs, filtering to account for the locations that are too far from the shoreline
         levelised_cost_raw = np.divide(discounted_costs_sum, hydrogen_produced_sum)
-        levelised_cost_adj = xr.where(levelised_cost_raw == 0, np.nan, levelised_cost_raw)
-        levelised_cost = xr.where(self.high_seas == True, np.nan, levelised_cost_adj)
+        levelised_cost = xr.where(levelised_cost_raw == 0, np.nan, levelised_cost_raw)
         
         # Create dataset with results
         data_vars = {'levelised_cost': levelised_cost,
@@ -873,16 +905,16 @@ class HydrogenModel:
 
 #### FOR IAIN
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-#renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
-#input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
-#output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
+renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
+input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
+output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 
 ### FOR LUKE
 
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
-input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
-output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
+#renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
+#input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
+#output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
     
 # Record start time
 start_time = time.time()
@@ -891,7 +923,7 @@ start_time = time.time()
 #all_files_class = All_Files(lat_lon=[48, 62, -10, 2], filepath=renewable_profiles_path, name_format="WIND_CF.")
 
 #### GLOBAL
-all_files_class = All_Files(lat_lon=[-90, 90, -180, 180], filepath=renewable_profiles_path, name_format="WIND_CF.")
+all_files_class = All_Files(lat_lon=[-90, 90, -180, -180], filepath=renewable_profiles_path, name_format="WIND_CF.")
 files_provided, years = all_files_class.preprocess_combine_yearly()
 renewable_profile_array = files_provided['CF'] 
 print(renewable_profile_array)
@@ -903,7 +935,7 @@ model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=year
 
 
 # Calculate the levelised cost
-combined_results = model.global_optimisation_parallelised()
+combined_results = model.get_levelised_cost()
 print("SciPy BasinHopping finished running")
 model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
 opt_levelised_costs = combined_results['levelised_cost']
