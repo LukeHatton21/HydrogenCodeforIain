@@ -3,7 +3,7 @@ import xarray as xr
 import time
 import dask
 import csv
-import cartopy.crs as ccrs
+#import cartopy.crs as ccrs
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -324,7 +324,7 @@ class HydrogenModel:
         # Print combined results for onshore and offshore
         print("Results for all locations:")
         self.print_info_from_results(costs)
-        self.plot_data(costs, latitudes, longitudes, "LCOH (USD/kg), all locations", "all_locations_lcoh_", 1)
+        #self.plot_data(costs, latitudes, longitudes, "LCOH (USD/kg), all locations", "all_locations_lcoh_", 1)
         
     
  
@@ -856,18 +856,27 @@ class HydrogenModel:
 
 ## OUTPUTS ##
 
+#### FOR IAIN
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
-input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
-output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
+renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_WIND_CF/"
+input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
+output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
+
+### FOR LUKE
+
+# Specify Paths to Input Data, Renewables Profiles and Location for the Output File
+#renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
+#input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
+#output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
     
 # Record start time
 start_time = time.time()
 
+#### UK
+#all_files_class = All_Files(lat_lon=[48, 62, -10, 2], filepath=renewable_profiles_path, name_format="WIND_CF.")
 
-# Read in the renewable profile dataset from files provided by Iain
-lat_lon=[-90, 90, -180, 180]
-all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+#### GLOBAL
+all_files_class = All_Files(lat_lon=[-90, 90, -180, 180], filepath=renewable_profiles_path, name_format="WIND_CF.")
 files_provided, years = all_files_class.preprocess_combine_yearly()
 renewable_profile_array = files_provided['CF'] 
 print(renewable_profile_array)
