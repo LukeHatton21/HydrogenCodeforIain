@@ -5,18 +5,19 @@ import geopandas as gpd
 from shapely.geometry import Point
 import matplotlib.pyplot as plt
 import numpy as np
-# import cartopy.crs as ccrs
+import cartopy.crs as ccrs
 from scipy.spatial.distance import cdist
 import regionmask
 
 
 class Global_Data:
     # All locations with depth, category and distance to shore computed
-    def __init__(self, bathymetry_data, dist2shore, countries, datafile):
+    def __init__(self, bathymetry_data, dist2shore, countries, datafile, resolution=None):
         self.bathymetry_data = xr.open_dataset(bathymetry_data)
-        self.ds = datafile
+        self.input_data = datafile
         self.dist2shore = xr.open_dataset(dist2shore)
         self.countries_data = xr.open_dataset(countries)
+        self.resolution = resolution
 
 
     def get_depth_in_required_resolution(self):
@@ -26,7 +27,7 @@ class Global_Data:
         #print(bathymetry)
 
         # Read renewables file and identify resolution
-        target_data = self.ds
+        target_data = self.input_data
 
         
         # Reindex using the xarray reindex function
@@ -51,15 +52,32 @@ class Global_Data:
         
         return bathymetry_new
     
+
+    def interpolate_data(self, dataset, resolution, interp_method):
+        resolution = self.resolution
+        latitudes = dataset.latitude.values
+        longitudes = dataset.longitude.values
+        new_latitudes = np.arange(latitudes[2], latitudes[-2]+resolution, resolution)
+        new_longitudes = np.arange(longitudes[2], longitudes[-2]+resolution, resolution)
+        interp_dataset = dataset.interp(latitude=new_latitudes, longitude=new_longitudes, method=interp_method)
+        print("Interpolation of Countries Data Complete")
+        print(interp_dataset)
+        return interp_dataset
+    
+    
     
     def get_countries_in_required_resolution(self):
 
         # Read Countries file
         countries = self.countries_data
-
+        
+        
+        # Interpolate countries
+        interp_countries = self.interpolate_data(countries, self.resolution, "nearest")
+        print(interp_countries)
 
         # Read renewables file and identify resolution
-        target_data = self.ds
+        target_data = self.input_data
 
         
         # Reindex using the xarray reindex function
@@ -74,7 +92,7 @@ class Global_Data:
         countries_output = xr.Dataset(data_vars=data_vars, coords=coords)
 
         # Plot data
-        # self.plot_data(countries_output) 
+        #self.plot_data(countries_output) 
         
         return countries_output
 
@@ -95,13 +113,13 @@ class Global_Data:
     
     def get_offshore_mask(self):
     
-        longitude = np.arange(-179.5, 180, 0.1)
-        latitude = np.arange(-89.5, 90, 0.1)
+        longitude = np.arange(-179.5, 180, 0.025)
+        latitude = np.arange(-89.5, 90, 0.025)
         mask = regionmask.defined_regions.natural_earth_v5_0_0.land_10.mask(longitude, latitude)
         mask = mask.rename({'lat': 'latitude','lon': 'longitude'})
         
         # Read renewables file and identify resolution
-        target_data = self.ds
+        target_data = self.input_data
         
         # Reindex using the xarray reindex function
         new_coords = {'latitude': target_data.latitude, 'longitude': target_data.longitude}
@@ -116,6 +134,18 @@ class Global_Data:
         #self.plot_data(offshore_dataset)
 
         return offshore_dataset
+    
+    
+    def interpolate_dist2shore_data(self, dataset, resolution, interp_method):
+        resolution = self.resolution
+        latitudes = dataset.Latitude.values
+        longitudes = dataset.Longitude.values
+        new_latitudes = np.arange(latitudes[2], latitudes[-2]+resolution, resolution)
+        new_longitudes = np.arange(longitudes[2], longitudes[-2]+resolution, resolution)
+        interp_dataset = dataset.interp(Latitude=new_latitudes, Longitude=new_longitudes, method=interp_method)
+        print("Interpolation of Distance to Shore Data Complete")
+        print(interp_dataset)
+        return interp_dataset
 
     def get_distance_to_shore(self):
         
@@ -123,8 +153,11 @@ class Global_Data:
         dist2shore = self.dist2shore
         #print(dist2shore)
         
+        interp_dist2shore = self.interpolate_dist2shore_data(dist2shore, self.resolution, "linear")
+        print(interp_dist2shore)
+        
         # Read renewables file and identify resolution
-        target_data = self.ds
+        target_data = self.input_data
 
         # Resample the bathymetry file along the latitude dimension
         resampled_dist2shore_lat = dist2shore.interp(Latitude=target_data.latitude, method='nearest')
