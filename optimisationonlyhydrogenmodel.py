@@ -19,6 +19,7 @@ from geodata import Global_Data
 from filepreprocessor import All_Files
 from datetime import datetime  
 import os 
+import regionmask
 os.environ['MKL_NUM_THREADS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_DYNAMIC'] = 'FALSE'
@@ -26,27 +27,27 @@ os.environ['MKL_DYNAMIC'] = 'FALSE'
 
 
 class HydrogenModel:
-    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None, wind_capex=None, percentage_wind=None, renewable_op_cost=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, electrolyser_type=None, electrolyser_capacity=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None):
+    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None):
         if params_file_elec is not None:
             self.electrolyser_class = self.parameters_from_csv(params_file_elec, 'electrolyser')
-        else:
-            self.electrolyser = Electrolyser(electrolyser_capacity, efficiency, electrolyser_type, elec_capex, elec_op_cost)
 
         if params_file_renew is not None:
             self.economic_profile_class = self.parameters_from_csv(params_file_renew, 'renewables')
-        else:
-            self.percentage_wind = percentage_wind
-            self.renewable_op_cost = renewable_op_cost
-            self.wind_capex = wind_capex
-            self.renewable_profile_class = Economic_Profile(renewables_capacity, percentage_wind,
-                                                              renewable_op_cost, wind_capex, renewables_data=dataset,lifetime=None)
+
         if resolution is not None:
             self.renewables_data = self.interpolate_data(dataset, resolution)
             self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), self.renewables_data, resolution)
         else: 
             self.renewables_data = dataset
             self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), dataset)
-
+        
+        # In the case of two input files, interpolate both and then apply the onshore/offshore mask to determine which value to take
+        if onshore_RN is not None:
+            self.renewables_data = self.process_multiple_RN_files(onshore_RN, offshore_RN, resolution)
+            self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), self.renewables_data, resolution)
+            
+            
+        
         self.geodata = self.geodata_class.get_all_data_variables()
         
         #self.renewables_data = dataset
@@ -60,6 +61,32 @@ class HydrogenModel:
         self.country_wacc_mapping = pd.read_csv((data_path + "new_country_waccs.csv"))
         self.country_data = xr.open_dataset((data_path + "country_grids.nc"))
         print("Setting up the Hydrogen Model Class")
+        
+        
+    def process_multiple_RN_files(self, onshore_file, offshore_file, resolution):
+
+        
+        # Interpolate onshore & offshore masks
+        onshore_file_interp = self.interpolate_data(onshore_file, resolution)
+        offshore_file_interp = self.interpolate_data(offshore_file, resolution)
+        
+        # Get latitudes and longitudes
+        latitudes = onshore_file_interp.latitude.values
+        longitudes = offshore_file_interp.longitude.values
+        
+        # Create onshore/offshore mask based on resolution of interpolated data
+        onshore_mask = regionmask.defined_regions.natural_earth_v5_0_0.land_10.mask(longitudes, latitudes)
+        onshore_mask = onshore_mask.rename({'lat': 'latitude','lon': 'longitude'})
+        land_mask = xr.where(onshore_mask == 0, 0, 1)
+        
+        # Take values depending on onshore or offshore status
+        renewables_data = xr.where(onshore_mask == 1, offshore_file_interp, onshore_file_interp)
+        renewables_data_reordered = renewables_data.transpose('time', 'latitude', 'longitude')
+        print("Additional Code Added:")
+        print(renewables_data)
+        print(renewables_data_reordered)
+        print(renewables_data.mean(dim='time'))
+        return renewables_data_reordered
         
         
     def remove_high_seas(self):
@@ -87,7 +114,6 @@ class HydrogenModel:
         print("Interpolation of Renewable Data Complete")
         print(interp_dataset)
         return interp_dataset
-    
     
             
     def parameters_from_csv(self, file_path, class_name):
@@ -163,11 +189,7 @@ class HydrogenModel:
             hydrogen_produced_yearly = self.extend_to_lifetime(hydrogen_produced_yearly, lifetime)
             electrolyser_costs_yearly = self.extend_to_lifetime(electrolyser_costs_yearly, lifetime)
             renewables_costs_yearly = self.extend_to_lifetime(renewables_costs_yearly, lifetime)
-        
-        # Add in the cost of desalination
-        desalinated_water_costs = 0.002 * hydrogen_produced_yearly
-        electrolyser_costs_yearly = electrolyser_costs_yearly + desalinated_water_costs
-        
+            
         # Check whether individual discount rates are provided, if so then discount the costs separately    
         if self.economic_profile_class.renew_discount_rate is not None:
             print("Discounting Renewable and Electrolyser costs separately")
@@ -573,8 +595,8 @@ class HydrogenModel:
         discounted_renew_costs = self.country_wacc_discounts(renewables_costs_yearly)
         discounted_elec_costs = self.country_wacc_discounts(electrolyser_costs_yearly, 1)
         discounted_output = self.country_wacc_discounts(hydrogen_produced_yearly, 1)
-        if elec_print is not None:
-            print(f"Electrolyser Capacity: {capacity} kW")
+        #if elec_print is not None:
+            #print(f"Electrolyser Capacity: {capacity} kW")
         discounted_costs = discounted_renew_costs + discounted_elec_costs
             
             
@@ -684,7 +706,7 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores = 24 #  # Use all available CPU cores
+        num_cores =  24 #  # Use all available CPU cores
         parallel_results = Parallel(n_jobs=num_cores, verbose=10)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         
         
@@ -873,6 +895,7 @@ class HydrogenModel:
         desalinated_water_costs = 0.002 * hydrogen_produced_yearly
         electrolyser_costs_yearly = electrolyser_costs_yearly + desalinated_water_costs
         
+        
         # Discount renewables and electrolyser costs separately
         discounted_renew_costs = self.country_wacc_discounts(renewables_costs_yearly)
         discounted_elec_costs = self.country_wacc_discounts(electrolyser_costs_yearly, 1)
@@ -927,12 +950,6 @@ class HydrogenModel:
     
 
 
-### HYDROGEN MODEL PREAMBLE ###
-
-## INPUTS ##
-
-
-## CONSTRAINTS ##
 
 
 #### FOR IAIN
@@ -951,21 +968,56 @@ output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 # Record start time
 start_time = time.time()
 
-#### UK
-all_files_class = All_Files(lat_lon=[46, 64, -12, 4], filepath=renewable_profiles_path, name_format="WIND_CF.")
+
+### Set Latitude and Longitude ###
+
+### UK
+lat_lon = [48, 62, -12, 5]
 
 #### GLOBAL
-#all_files_class = All_Files(lat_lon=[-90, 90, -180, -180], filepath=renewable_profiles_path, name_format="WIND_CF.")
-files_provided, years = all_files_class.preprocess_combine_yearly()
-renewable_profile_array = files_provided['CF'] 
-print(renewable_profile_array)
-print("Files from Renewables Ninja read in, corrected and combined")
+#lat_lon=[-90, 90, -180, -180]
 
+
+
+                            ### Single input file ###
+## Set up files class
+#all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+
+## Preprocess the files 
+#files_provided, years = all_files_class.preprocess_combine_yearly()
+#renewable_profile_array = files_provided['CF'] 
+#print(renewable_profile_array)
+#print("Files from Renewables Ninja read in, corrected and combined")
 
 # Initialise an HydrogenModel object
-model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1)
+#model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1)
 
 
+
+                    ### Two files for onshore/offshore CFs ###
+
+## NAME FORMAT TO BE CHANGED TO RELEVANT RN FILES
+
+# Set up two file classes
+onshore_assumed_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+offshore_assumed_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+
+## Preprocess the RN files which have assumed onshore wind farm CFs at all locations
+onshore_runs, years = onshore_assumed_class.preprocess_combine_yearly()
+onshore_renewable_array = onshore_runs['CF'] 
+print("Files from Renewables Ninja (assumed onshore) read in, corrected and combined")
+
+## Preprocess the RN files which have assumed offshore wind farm CFs at all locations
+offshore_runs, years = offshore_assumed_class.preprocess_combine_yearly()
+offshore_renewable_array = offshore_runs['CF'] + 5
+print("Files from Renewables Ninja (assumed offshore) read in, corrected and combined")
+
+# Initialise an HydrogenModel object
+model = HydrogenModel(dataset=onshore_renewable_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1, onshore_RN=onshore_renewable_array , offshore_RN=offshore_renewable_array)
+
+
+                            ### Both Instances ###
+    
 # Calculate the levelised cost
 combined_results = model.global_optimisation_parallelised()
 print("SciPy BasinHopping finished running")
@@ -982,19 +1034,3 @@ elapsed_time = end_time - start_time
 
 # Print elapsed time in seconds
 print(f"Model took {elapsed_time:.2f} seconds to run")
-
-    
-    
-
-    
-    
-    
-
-    
-
-    
-    
-    
-
-
-
