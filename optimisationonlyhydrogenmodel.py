@@ -938,7 +938,7 @@ model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=year
 
 
 # Calculate the levelised cost
-combined_results = model.get_levelised_cost()
+combined_results = model.global_optimisation_parallelised()
 print("SciPy BasinHopping finished running")
 model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
 opt_levelised_costs = combined_results['levelised_cost']
