@@ -593,6 +593,9 @@ class HydrogenModel:
         # Evaluate nature of gridpoint
         offshore_status = self.geodata['offshore'].sel(longitude = lon, latitude=lat)   
         
+        # Evaluate nature of gridpoint
+        high_seas_status = self.high_seas.sel(longitude=lon, latitude=lat)
+        
         # Check if location is sea
         if high_seas_status == True:
             print("Located in the High Seas")
