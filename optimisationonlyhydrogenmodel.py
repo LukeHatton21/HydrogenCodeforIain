@@ -163,7 +163,11 @@ class HydrogenModel:
             hydrogen_produced_yearly = self.extend_to_lifetime(hydrogen_produced_yearly, lifetime)
             electrolyser_costs_yearly = self.extend_to_lifetime(electrolyser_costs_yearly, lifetime)
             renewables_costs_yearly = self.extend_to_lifetime(renewables_costs_yearly, lifetime)
-            
+        
+        # Add in the cost of desalination
+        desalinated_water_costs = 0.002 * hydrogen_produced_yearly
+        electrolyser_costs_yearly = electrolyser_costs_yearly + desalinated_water_costs
+        
         # Check whether individual discount rates are provided, if so then discount the costs separately    
         if self.economic_profile_class.renew_discount_rate is not None:
             print("Discounting Renewable and Electrolyser costs separately")
@@ -864,6 +868,10 @@ class HydrogenModel:
             hydrogen_produced_yearly = self.extend_to_lifetime(hydrogen_produced_yearly, lifetime)
             electrolyser_costs_yearly = self.extend_to_lifetime(electrolyser_costs_yearly, lifetime)
             renewables_costs_yearly = self.extend_to_lifetime(renewables_costs_yearly, lifetime)
+        
+        # Add in the cost of desalination
+        desalinated_water_costs = 0.002 * hydrogen_produced_yearly
+        electrolyser_costs_yearly = electrolyser_costs_yearly + desalinated_water_costs
         
         # Discount renewables and electrolyser costs separately
         discounted_renew_costs = self.country_wacc_discounts(renewables_costs_yearly)
