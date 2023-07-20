@@ -73,8 +73,10 @@ class Global_Data:
         
         
         # Interpolate countries
-        interp_countries = self.interpolate_data(countries, self.resolution, "nearest")
-        print(interp_countries)
+        if self.resolution is not None:
+            interp_countries = self.interpolate_data(countries, self.resolution, "nearest")
+            print(interp_countries)
+            countries = interp_countries
 
         # Read renewables file and identify resolution
         target_data = self.input_data
@@ -153,8 +155,10 @@ class Global_Data:
         dist2shore = self.dist2shore
         #print(dist2shore)
         
-        interp_dist2shore = self.interpolate_dist2shore_data(dist2shore, self.resolution, "linear")
-        print(interp_dist2shore)
+        if self.resolution is not None:
+            interp_dist2shore = self.interpolate_dist2shore_data(dist2shore, self.resolution, "linear")
+            print(interp_dist2shore)
+            dist2shore = interp_dist2shore
         
         # Read renewables file and identify resolution
         target_data = self.input_data
