@@ -579,7 +579,7 @@ class HydrogenModel:
                     
         # Set up optimisation problem
         initial_guess = [self.electrolyser_capacity]
-        low_bound = 0.45 * self.renewables_capacity
+        low_bound = 0.5 * self.renewables_capacity
         upp_bound = 1.0 * self.renewables_capacity
         bounds = [(low_bound, upp_bound)]
             
