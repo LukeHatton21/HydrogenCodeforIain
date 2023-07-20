@@ -968,10 +968,10 @@ start_time = time.time()
 ### Set Latitude and Longitude ###
 
 ### UK
-#lat_lon = [48, 62, -12, 5]
+lat_lon = [58, 62, -6, -3]
 
 #### GLOBAL
-lat_lon=[-90, 90, -180, -180]
+#lat_lon=[-90, 90, -180, -180]
 
 
 
@@ -986,7 +986,7 @@ print(renewable_profile_array)
 print("Files from Renewables Ninja read in, corrected and combined")
 
 # Initialise an HydrogenModel object
-model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1)
+model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder)
 
 
 

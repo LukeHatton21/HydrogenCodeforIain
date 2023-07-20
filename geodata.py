@@ -5,7 +5,7 @@ import geopandas as gpd
 from shapely.geometry import Point
 import matplotlib.pyplot as plt
 import numpy as np
-import cartopy.crs as ccrs
+#import cartopy.crs as ccrs
 from scipy.spatial.distance import cdist
 import regionmask
 
