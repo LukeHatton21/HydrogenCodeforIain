@@ -893,7 +893,7 @@ start_time = time.time()
 #lat_lon = [48, 62, -12, 5]
 
 #### GLOBAL
-lat_lon=[-90, 90, -180, -180]
+lat_lon=[-90, 90, -180, 180]
 
 
 
