@@ -92,13 +92,9 @@ class HydrogenModel:
     def remove_high_seas(self):
         
         nan_mask_sea = xr.where(np.isnan(self.geodata['sea']), True, False)
-        print(nan_mask_sea)
         nan_mask_land = xr.where(np.isnan(self.geodata['land']), True, False)
-        print(nan_mask_land)
         combined_nan_mask = nan_mask_sea & nan_mask_land
-        print(combined_nan_mask)
         masked_renewables = self.renewables_data.where(combined_nan_mask==False, drop=True)
-        print(masked_renewables)
         return masked_renewables, combined_nan_mask
     
     
@@ -972,25 +968,25 @@ start_time = time.time()
 ### Set Latitude and Longitude ###
 
 ### UK
-lat_lon = [48, 62, -12, 5]
+#lat_lon = [48, 62, -12, 5]
 
 #### GLOBAL
-#lat_lon=[-90, 90, -180, -180]
+lat_lon=[-90, 90, -180, -180]
 
 
 
                             ### Single input file ###
 ## Set up files class
-#all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
 
 ## Preprocess the files 
-#files_provided, years = all_files_class.preprocess_combine_yearly()
-#renewable_profile_array = files_provided['CF'] 
-#print(renewable_profile_array)
-#print("Files from Renewables Ninja read in, corrected and combined")
+files_provided, years = all_files_class.preprocess_combine_yearly()
+renewable_profile_array = files_provided['CF'] 
+print(renewable_profile_array)
+print("Files from Renewables Ninja read in, corrected and combined")
 
 # Initialise an HydrogenModel object
-#model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1)
+model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1)
 
 
 
@@ -999,21 +995,21 @@ lat_lon = [48, 62, -12, 5]
 ## NAME FORMAT TO BE CHANGED TO RELEVANT RN FILES
 
 # Set up two file classes
-onshore_assumed_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
-offshore_assumed_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+#onshore_assumed_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+#offshore_assumed_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
 
 ## Preprocess the RN files which have assumed onshore wind farm CFs at all locations
-onshore_runs, years = onshore_assumed_class.preprocess_combine_yearly()
-onshore_renewable_array = onshore_runs['CF'] 
-print("Files from Renewables Ninja (assumed onshore) read in, corrected and combined")
+#onshore_runs, years = onshore_assumed_class.preprocess_combine_yearly()
+#onshore_renewable_array = onshore_runs['CF'] 
+#print("Files from Renewables Ninja (assumed onshore) read in, corrected and combined")
 
 ## Preprocess the RN files which have assumed offshore wind farm CFs at all locations
-offshore_runs, years = offshore_assumed_class.preprocess_combine_yearly()
-offshore_renewable_array = offshore_runs['CF'] + 5
-print("Files from Renewables Ninja (assumed offshore) read in, corrected and combined")
+#offshore_runs, years = offshore_assumed_class.preprocess_combine_yearly()
+#offshore_renewable_array = offshore_runs['CF'] + 5
+#print("Files from Renewables Ninja (assumed offshore) read in, corrected and combined")
 
 # Initialise an HydrogenModel object
-model = HydrogenModel(dataset=onshore_renewable_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1, onshore_RN=onshore_renewable_array , offshore_RN=offshore_renewable_array)
+#model = HydrogenModel(dataset=onshore_renewable_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder, resolution=0.1, onshore_RN=onshore_renewable_array , offshore_RN=offshore_renewable_array)
 
 
                             ### Both Instances ###
