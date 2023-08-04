@@ -906,7 +906,7 @@ start_time = time.time()
 for lon_slice in np.linspace(1, 3, 3).astype(int):
 
     # Set up for loop for each individual slice of 5 longitudes within the error-prone slice
-    for i in np.linspace(0, 50, 12).astype(int):
+    for i in np.linspace(0, 55, 12).astype(int):
         
         if lon_slice == 1: 
             lat_lon=[-90, 90, -120+i, -115+i]
