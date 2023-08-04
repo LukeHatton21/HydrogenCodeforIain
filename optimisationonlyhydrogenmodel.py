@@ -14,6 +14,7 @@ from scipy.optimize import minimize
 from scipy.optimize import basinhopping
 from joblib import Parallel, delayed
 from electrolyser import Electrolyser
+#from battery_algorithm import 
 from economicmodel import Economic_Profile
 from geodata import Global_Data
 from filepreprocessor import All_Files
@@ -27,7 +28,7 @@ os.environ['MKL_DYNAMIC'] = 'FALSE'
 
 
 class HydrogenModel:
-    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None):
+    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None, battery_functionality=None):
         if params_file_elec is not None:
             self.electrolyser_class = self.parameters_from_csv(params_file_elec, 'electrolyser')
 
@@ -46,12 +47,13 @@ class HydrogenModel:
             self.renewables_data = self.process_multiple_RN_files(onshore_RN, offshore_RN, resolution)
             self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), self.renewables_data, resolution)
             
-            
+        if battery_functionality is not None:
+            self.renewables_data = self.battery_smoothing()
         
         self.geodata = self.geodata_class.get_all_data_variables()
         
         #self.renewables_data = dataset
-        self.renewables_data_masked, self.high_seas = self.remove_high_seas()
+        self.high_seas = self.remove_high_seas()
         self.electrolyser_capacity = self.economic_profile_class.electrolyser_capacity
         self.electrolyser_class.elec_capacity_array = xr.zeros_like(dataset) + self.electrolyser_capacity
         self.discount_rate = discount_rate
@@ -62,7 +64,9 @@ class HydrogenModel:
         self.country_data = xr.open_dataset((data_path + "country_grids.nc"))
         print("Setting up the Hydrogen Model Class")
         
-        
+    
+    
+    
     def process_multiple_RN_files(self, onshore_file, offshore_file, resolution):
 
         
@@ -94,8 +98,7 @@ class HydrogenModel:
         nan_mask_sea = xr.where(np.isnan(self.geodata['sea']), True, False)
         nan_mask_land = xr.where(np.isnan(self.geodata['land']), True, False)
         combined_nan_mask = nan_mask_sea & nan_mask_land
-        masked_renewables = self.renewables_data.where(combined_nan_mask==False, drop=True)
-        return masked_renewables, combined_nan_mask
+        return combined_nan_mask
     
     
     
@@ -308,7 +311,7 @@ class HydrogenModel:
             else:
                 country_row = country_wacc_mappings.loc[country_wacc_mappings['index'] == sea_value]
                 country_wacc = country_row.loc[country_row.index[0],'offshore wacc']
-                    # Lookup country code in the mapping
+                
         else: 
             country_row = country_wacc_mappings.loc[country_wacc_mappings['index'] == land_value]
             country_wacc = country_row.loc[country_row.index[0],'onshore wacc']
@@ -407,7 +410,7 @@ class HydrogenModel:
         
         
     
-    def plot_data(self, values, latitudes, longitudes, name, filename=None, increment=None):
+    def plot_data(self, values, latitudes, longitudes, name, filename=None, increment=None, title=None):
         
 
         # create the heatmap using pcolormesh
@@ -422,16 +425,22 @@ class HydrogenModel:
             cb.ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%0.0f'))
         else:
             cb = fig.colorbar(heatmap, ax=ax, shrink=0.5)
-
+        
+        cb.ax.tick_params(labelsize=30)
+        if title is not None:
+            cb.ax.set_title(title, fontsize=40)
+        
         # set the extent and aspect ratio of the plot
         ax.set_extent([longitudes.min(), longitudes.max(), latitudes.min(), latitudes.max()], crs=ccrs.PlateCarree())
         aspect_ratio = (latitudes.max() - latitudes.min()) / (longitudes.max() - longitudes.min())
         ax.set_aspect(aspect_ratio)
 
         # add axis labels and a title
-        ax.set_xlabel('Longitude')
-        ax.set_ylabel('Latitude')
-        ax.set_title(name + ' heatmap')
+        ax.set_xlabel('Longitude', fontsize=30)
+        ax.set_ylabel('Latitude', fontsize=30)
+        ax.set_title(name + ' heatmap', fontsize=40)
+        cb.ax.xaxis.set_label_position('top')
+        cb.ax.xaxis.set_ticks_position('top')
         ax.coastlines()
         ax.stock_img()
         
@@ -481,7 +490,7 @@ class HydrogenModel:
         sorted_indices = np.argsort(cost_values)
         sorted_cost = cost_values[sorted_indices]
         sorted_production = production_values[sorted_indices]
-        cost_rounded = sorted_cost.round(decimals=1)
+        cost_rounded = sorted_cost.round(decimals=3)
 
         unique_costs, unique_indices = np.unique(cost_rounded, return_index=True)
         unique_production = np.add.reduceat(sorted_production, unique_indices)
@@ -490,17 +499,17 @@ class HydrogenModel:
 
         plt.figure(figsize=(20,8))
         plt.bar(cumulative_production/1e+06, unique_costs, align='edge', width=unique_production/1e+06)  # Plotting cumulative amounts against unique costs
-        plt.ylabel('Levelised Cost (USD/kg H2)')
-        plt.xlabel('Annual Hydrogen Production (million tonnes per annum)')
+        plt.ylabel('Levelised Cost (USD/kg H2)', fontsize=30)
+        plt.xlabel('Annual Hydrogen Production (million tonnes per annum)', fontsize=30)
         plt.axis([0, math.ceil(cumulative_production.max()/1e+06), 0, math.ceil(unique_costs.max())])
-        plt.xticks(np.arange(0, math.ceil(cumulative_production.max()/1e+06), step=50))
-        plt.yticks(np.arange(0, math.ceil(unique_costs.max()), step=1))
+        plt.xticks(np.arange(0, math.ceil(cumulative_production.max()/1e+06), step=50), fontsize=30)
+        plt.yticks(np.arange(0, math.ceil(unique_costs.max()), step=1), fontsize=30)
         plt.axvline(x = 94, color = 'b', label = 'Annual Hydrogen Demand (IEA 2021)')
         plt.axhline(y = 1, color = 'r', linestyle='--', label = 'LB Cost of Hydrogen from natural gas (IEA 2021)')
         plt.axhline(y = 2.4, color = 'r', linestyle='--', label = 'UB Cost of Hydrogen from natural gas (IEA 2021)')
-        plt.legend(bbox_to_anchor = (1.0, 1), loc = 'upper right')
+        plt.legend(bbox_to_anchor = (1.0, 1), loc = 'upper right', fontsize=20)
  
-        plt.title('Supply-cost curve of green hydrogen')
+        plt.title('Supply-cost curve of green hydrogen', fontsize=36)
         plt.show()
         
         return supply_curve_ds
@@ -564,7 +573,6 @@ class HydrogenModel:
         
         # Check if location is sea
         if high_seas_status == True:
-            print("Located in the High Seas")
             da = xr.DataArray(np.array([[np.nan]]), coords={'latitude': [lat], 'longitude': [lon]}, dims={'latitude', 'longitude'})
             
             data_vars = {'levelised_cost': da,
@@ -863,7 +871,7 @@ class HydrogenModel:
         # Output the file
         if filename is None:
             filename = 'unspecified_results_' 
-        results.to_netcdf(output_folder + filename + '_' + years_str + '_' + str_date_time + '.nc')
+        results.to_netcdf(output_folder + filename + '.nc')
     
     
 
@@ -882,6 +890,7 @@ output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 #renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
 #input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
 #output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
+#output_folder = "/Users/lukehatton/Sync/OUTPUT_FOLDER/"
     
 # Record start time
 start_time = time.time()
@@ -893,22 +902,34 @@ start_time = time.time()
 #lat_lon = [48, 62, -12, 5]
 
 #### GLOBAL
-lat_lon=[-90, 90, -180, 180]
+#lat_lon=[-90, 90, -180, 180]
 
+# Set up for loop to select each of the error-prone slices
+for lon_slice in np.linspace(1, 3, 3).astype(int):
+
+    # Set up for loop for each individual slice of 5 longitudes within the error-prone slice
+    for i in np.linspace(0, 50, 12).astype(int):
+        
+        if lon_slice == 1: 
+            lat_lon=[-90, 90, -120+i, -115+i]
+        elif lon_slice == 2:
+            lat_lon=[-90, 90, 60+i, 65+i]           
+        elif lon_slice == 3:
+            lat_lon=[-90, 90, 120+i, 125+i]  
 
 
                             ### Single input file ###
-## Set up files class
-all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+        ## Set up files class
+        all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
 
-## Preprocess the files 
-files_provided, years = all_files_class.preprocess_combine_yearly()
-renewable_profile_array = files_provided['CF'] 
-print(renewable_profile_array)
-print("Files from Renewables Ninja read in, corrected and combined")
+        ## Preprocess the files 
+        files_provided, years = all_files_class.preprocess_combine_yearly()
+        renewable_profile_array = files_provided['CF'] 
+        print(renewable_profile_array)
+        print("Files from Renewables Ninja read in, corrected and combined")
 
-# Initialise an HydrogenModel object
-model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder)
+        # Initialise an HydrogenModel object
+        model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder)
 
 
 
@@ -936,19 +957,33 @@ model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=year
 
                             ### Both Instances ###
     
-# Calculate the levelised cost
-combined_results = model.global_optimisation_parallelised()
-print("SciPy BasinHopping finished running")
-model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
-opt_levelised_costs = combined_results['levelised_cost']
-opt_annual_production = combined_results['hydrogen_production']
-model.print_results_separately(opt_levelised_costs)
+    # Calculate the levelised cost
+        # Try each smaller longitude slice a
+        try:
+            combined_results = model.global_optimisation_parallelised()
+            print("SciPy BasinHopping finished running")
+            #model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
+            filename = "FullGlobeOptimisedResults_LongitudeSlice_" + str(lat_lon[2]) + '_' + str(lat_lon[3])
+            model.save_results(output_folder, combined_results, filename)
+            #opt_levelised_costs = combined_results['levelised_cost']
+            #opt_annual_production = combined_results['hydrogen_production']
+            #model.print_results_separately(opt_levelised_costs)
+        # Catch the error if there is one and store in the output folder as a .txt file
+        except Exception as e:
+            # Handle the error here
+            error_message = str(e)
+            # You can store the error message in a file or a database
+            with open(output_folder + 'error_log_' + lat_lon[2] + '_' + lat_lon[3] + '.txt', 'w') as f:
+                f.write(error_message + '\n')
+        
+    
 
-# Record end time
-end_time = time.time()
 
-# Calculate elapsed time
-elapsed_time = end_time - start_time
+        # Record end time
+        #end_time = time.time()
 
-# Print elapsed time in seconds
-print(f"Model took {elapsed_time:.2f} seconds to run")
+        # Calculate elapsed time
+        #elapsed_time = end_time - start_time
+
+        # Print elapsed time in seconds
+        #print(f"Model took {elapsed_time:.2f} seconds to run")
