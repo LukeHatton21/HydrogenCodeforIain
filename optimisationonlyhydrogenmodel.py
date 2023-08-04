@@ -956,7 +956,7 @@ for lon_slice in np.linspace(1, 3, 3).astype(int):
                             ### Both Instances ###
     
     # Calculate the levelised cost
-        # Try each smaller longitude slice a
+        # Try each smaller longitude slice
         try:
             combined_results = model.global_optimisation_parallelised()
             print("SciPy BasinHopping finished running")
