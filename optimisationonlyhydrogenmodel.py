@@ -28,7 +28,7 @@ os.environ['MKL_DYNAMIC'] = 'FALSE'
 
 
 class HydrogenModel:
-    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None, battery_functionality=None):
+    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None):
         if params_file_elec is not None:
             self.electrolyser_class = self.parameters_from_csv(params_file_elec, 'electrolyser')
 
@@ -47,8 +47,6 @@ class HydrogenModel:
             self.renewables_data = self.process_multiple_RN_files(onshore_RN, offshore_RN, resolution)
             self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), self.renewables_data, resolution)
             
-        if battery_functionality is not None:
-            self.renewables_data = self.battery_smoothing()
         
         self.geodata = self.geodata_class.get_all_data_variables()
         
