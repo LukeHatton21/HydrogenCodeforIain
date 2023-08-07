@@ -971,7 +971,7 @@ for lon_slice in np.linspace(1, 3, 3).astype(int):
             # Handle the error here
             error_message = str(e)
             # You can store the error message in a file or a database
-            with open(output_folder + 'error_log_' + lat_lon[2] + '_' + lat_lon[3] + '.txt', 'w') as f:
+            with open(output_folder + 'error_log_' + str(lat_lon[2]) + '_' + str(lat_lon[3]) + '.txt', 'w') as f:
                 f.write(error_message + '\n')
         
     
