@@ -28,7 +28,7 @@ os.environ['MKL_DYNAMIC'] = 'FALSE'
 
 
 class HydrogenModel:
-    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None, battery_functionality=None):
+    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None):
         if params_file_elec is not None:
             self.electrolyser_class = self.parameters_from_csv(params_file_elec, 'electrolyser')
 
@@ -47,8 +47,6 @@ class HydrogenModel:
             self.renewables_data = self.process_multiple_RN_files(onshore_RN, offshore_RN, resolution)
             self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), self.renewables_data, resolution)
             
-        if battery_functionality is not None:
-            self.renewables_data = self.battery_smoothing()
         
         self.geodata = self.geodata_class.get_all_data_variables()
         
@@ -652,7 +650,7 @@ class HydrogenModel:
     
         # Use joblib to parallelize the processing of grid points
         num_cores =  24 #  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=100)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        parallel_results = Parallel(n_jobs=num_cores, verbose=10)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         
         
         # Extract the results
@@ -919,20 +917,20 @@ class HydrogenModel:
 
 #### FOR IAIN
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-#renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
-#input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
-#output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
+renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
+input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
+output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 
 ### FOR LUKE
 
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
-input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
+#renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
+#input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
 #output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
-output_folder = "/Users/lukehatton/Documents/Imperial/Code/Optimisation_Results/"
+#output_folder = "/Users/lukehatton/Documents/Imperial/Code/Optimisation_Results/"
     
 # Record start time
-start_time = time.time()
+#start_time = time.time()
 
 
 ### Set Latitude and Longitude ###
