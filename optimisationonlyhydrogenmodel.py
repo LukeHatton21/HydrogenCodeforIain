@@ -28,7 +28,7 @@ os.environ['MKL_DYNAMIC'] = 'FALSE'
 
 
 class HydrogenModel:
-    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None):
+    def __init__(self, dataset,  discount_rate=None, renewables_capacity=None,params_file_elec=None, params_file_renew=None, data_path=None, output_folder=None, efficiency=None, elec_capex=None, elec_op_cost=None, elec_discount_rate=None, renew_discount_rate=None, lifetime=None, years=None, resolution=None, onshore_RN=None, offshore_RN=None, battery_functionality=None):
         if params_file_elec is not None:
             self.electrolyser_class = self.parameters_from_csv(params_file_elec, 'electrolyser')
 
@@ -47,6 +47,8 @@ class HydrogenModel:
             self.renewables_data = self.process_multiple_RN_files(onshore_RN, offshore_RN, resolution)
             self.geodata_class = Global_Data((data_path + "ETOPO_bathymetry.nc"),(data_path+"distance2shore.nc"), (data_path+"country_grids.nc"), self.renewables_data, resolution)
             
+        if battery_functionality is not None:
+            self.renewables_data = self.battery_smoothing()
         
         self.geodata = self.geodata_class.get_all_data_variables()
         
@@ -84,10 +86,7 @@ class HydrogenModel:
         # Take values depending on onshore or offshore status
         renewables_data = xr.where(onshore_mask == 1, offshore_file_interp, onshore_file_interp)
         renewables_data_reordered = renewables_data.transpose('time', 'latitude', 'longitude')
-        print("Additional Code Added:")
-        print(renewables_data)
-        print(renewables_data_reordered)
-        print(renewables_data.mean(dim='time'))
+        
         return renewables_data_reordered
         
         
@@ -554,10 +553,12 @@ class HydrogenModel:
     def cost_function(self, capacity, renewables_gridpoint):
         aggregated_results = self.parallel_levelised_cost(renewables_data=renewables_gridpoint, capacity=capacity, elec_print=1)
         return aggregated_results['levelised_cost'].mean()
+    
 
     def process_grid_point(self, lat, lon):
         
         loop_start = time.time()
+        
         # Get renewables data at each gridpoint
         renewables_gridpoint = self.renewables_data.sel(longitude = lon, latitude=lat)
         renewables_gridpoint = renewables_gridpoint.expand_dims(latitude=[lat], longitude=[lon])
@@ -582,6 +583,26 @@ class HydrogenModel:
                   'longitude': lon}
             high_seas_results = xr.Dataset(data_vars=data_vars, coords=coords)
             return high_seas_results, np.nan
+        
+        # Calculate Hydrogen Output
+        renewables_profile = renewables_gridpoint * self.renewables_capacity
+        electrolyser_yearly_output = self.electrolyser_class.calculate_yearly_output(renewables_profile, self.electrolyser_capacity)
+        hydrogen_yearly_output = electrolyser_yearly_output['hydrogen_produced']
+
+        
+        if hydrogen_yearly_output[1] == 0:
+            da = xr.DataArray(np.array([[np.nan]]), coords={'latitude': [lat], 'longitude': [lon]}, dims={'latitude', 'longitude'})
+            
+            data_vars = {'levelised_cost': da,
+                     'hydrogen_production': da,
+                     'electrolyser_capacity': da,
+                     'total_capital_costs': da,
+                     'configuration': da}
+            coords = {'latitude': lat,
+                  'longitude': lon}
+            zero_ouput_results = xr.Dataset(data_vars=data_vars, coords=coords)
+            return zero_ouput_results, np.nan   
+        
                     
         # Set up optimisation problem
         initial_guess = [self.electrolyser_capacity]
@@ -631,7 +652,7 @@ class HydrogenModel:
     
         # Use joblib to parallelize the processing of grid points
         num_cores =  24 #  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=10)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        parallel_results = Parallel(n_jobs=num_cores, verbose=100)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         
         
         # Extract the results
@@ -764,6 +785,26 @@ class HydrogenModel:
         renewables_gridpoint = renewables_gridpoint.expand_dims(latitude=[lat], longitude=[lon])
         renewables_gridpoint = renewables_gridpoint.transpose("time", "latitude", "longitude")
           
+         # Calculate Hydrogen Output
+        renewables_profile = renewables_gridpoint * self.renewables_capacity
+        electrolyser_yearly_output = self.electrolyser_class.calculate_yearly_output(renewables_profile, self.electrolyser_capacity)
+        hydrogen_yearly_output = electrolyser_yearly_output['hydrogen_produced']
+        
+        if hydrogen_yearly_output[1] == 0:
+            da = xr.DataArray(np.array([[np.nan]]), coords={'latitude': [lat], 'longitude': [lon]}, dims={'latitude', 'longitude'})
+            
+            data_vars = {'levelised_cost': da,
+                     'hydrogen_production': da,
+                     'electrolyser_capacity': da,
+                     'total_capital_costs': da,
+                     'configuration': da}
+            coords = {'latitude': lat,
+                  'longitude': lon}
+            zero_ouput_results = xr.Dataset(data_vars=data_vars, coords=coords)
+            return zero_ouput_results, np.nan   
+            
+        
+        
         # Get geodata
         geodata = self.geodata.sel(longitude=lon, latitude=lat)
         # Store hydrogen production
@@ -878,17 +919,17 @@ class HydrogenModel:
 
 #### FOR IAIN
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
-input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
-output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
+#renewable_profiles_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/MERRA2_INPUTS/WIND_CF/"
+#input_data_path = r"I:/NINJA_ERA5_GRIDDED_LUKE/"
+#output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 
 ### FOR LUKE
 
 # Specify Paths to Input Data, Renewables Profiles and Location for the Output File
-#renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
-#input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
+renewable_profiles_path = r"/Users/lukehatton/Sync/MERRA2_INPUTS/WIND_CF/"
+input_data_path = r"/Users/lukehatton/Documents/Imperial/Code/Data/"
 #output_folder = r"/Users/lukehatton/Documents/Imperial/Code/Results/"
-#output_folder = "/Users/lukehatton/Sync/OUTPUT_FOLDER/"
+output_folder = "/Users/lukehatton/Documents/Imperial/Code/Optimisation_Results/"
     
 # Record start time
 start_time = time.time()
@@ -903,31 +944,29 @@ start_time = time.time()
 #lat_lon=[-90, 90, -180, 180]
 
 # Set up for loop to select each of the error-prone slices
-for lon_slice in np.linspace(2, 3, 2).astype(int):
+for lon_slice in np.linspace(1, 3, 3).astype(int):
 
-    # Set up for loop for each individual slice of 5 longitudes within the error-prone slice
-    for i in np.linspace(0, 55, 12).astype(int):
-        
-        if lon_slice == 1: 
-            lat_lon=[-90, 90, -120+i, -115+i]
-        elif lon_slice == 2:
-            lat_lon=[-90, 90, 60+i, 65+i]           
-        elif lon_slice == 3:
-            lat_lon=[-90, 90, 120+i, 125+i]  
+    if lon_slice == 1: 
+        lat_lon=[90, -90, 70, 80]
+    elif lon_slice == 2:
+        lat_lon=[-90, 90, 100, 105]  
+    elif lon_slice == 3:
+        lat_lon=[-90, 90, 120, 125] 
+
 
 
                             ### Single input file ###
-        ## Set up files class
-        all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
+    ## Set up files class
+    all_files_class = All_Files(lat_lon=lat_lon, filepath=renewable_profiles_path, name_format="WIND_CF.")
 
-        ## Preprocess the files 
-        files_provided, years = all_files_class.preprocess_combine_yearly()
-        renewable_profile_array = files_provided['CF'] 
-        print(renewable_profile_array)
-        print("Files from Renewables Ninja read in, corrected and combined")
+    ## Preprocess the files 
+    files_provided, years = all_files_class.preprocess_combine_yearly()
+    renewable_profile_array = files_provided['CF'] 
+    print(renewable_profile_array)
+    print("Files from Renewables Ninja read in, corrected and combined")
 
-        # Initialise an HydrogenModel object
-        model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder)
+    # Initialise an HydrogenModel object
+    model = HydrogenModel(dataset=renewable_profile_array, lifetime = 20, years=years, params_file_elec=(input_data_path + "elec_parameters.csv"), params_file_renew=(input_data_path + "model_parameters.csv"), data_path = input_data_path, output_folder=output_folder)
 
 
 
@@ -956,23 +995,22 @@ for lon_slice in np.linspace(2, 3, 2).astype(int):
                             ### Both Instances ###
     
     # Calculate the levelised cost
-        # Try each smaller longitude slice
-        try:
-            combined_results = model.global_optimisation_parallelised()
-            print("SciPy BasinHopping finished running")
-            #model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
-            filename = "FullGlobeOptimisedResults_LongitudeSlice_" + str(lat_lon[2]) + '_' + str(lat_lon[3])
-            model.save_results(output_folder, combined_results, filename)
-            #opt_levelised_costs = combined_results['levelised_cost']
-            #opt_annual_production = combined_results['hydrogen_production']
-            #model.print_results_separately(opt_levelised_costs)
+        # Try each smaller longitude slice a
+    try:
+        combined_results = model.global_optimisation_parallelised()
+        print("SciPy BasinHopping finished running")
+        filename = "FullGlobeOptimisedResults_LatLongSlice_" + str(lat_lon[0]) + '_' + str(lat_lon[1]) + '_' + str(lat_lon[2]) + '_' + str(lat_lon[3])
+        model.save_results(output_folder, combined_results, filename)
+        #opt_levelised_costs = combined_results['levelised_cost']
+        #opt_annual_production = combined_results['hydrogen_production']
+        #model.print_results_separately(opt_levelised_costs)
         # Catch the error if there is one and store in the output folder as a .txt file
-        except Exception as e:
-            # Handle the error here
-            error_message = str(e)
-            # You can store the error message in a file or a database
-            with open(output_folder + 'error_log_' + str(lat_lon[2]) + '_' + str(lat_lon[3]) + '.txt', 'w') as f:
-                f.write(error_message + '\n')
+    except Exception as e:
+        # Handle the error here
+        error_message = str(e)
+        # You can store the error message in a file or a database
+        with open(output_folder + 'error_log_' + str(lat_lon[0]) + '_' + str(lat_lon[1]) + '_' + str(lat_lon[2]) + '_' + str(lat_lon[3]) + '.txt', 'w') as f:
+            f.write(error_message + '\n')
         
     
 
