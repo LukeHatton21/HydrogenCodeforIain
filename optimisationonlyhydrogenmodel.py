@@ -942,7 +942,7 @@ output_folder = r"I:/NINJA_ERA5_GRIDDED_LUKE/OUTPUT_FOLDER/"
 #lat_lon=[-90, 90, -180, 180]
 
 # Set up for loop to select each of the error-prone slices
-for lon_slice in np.linspace(1, 3, 3).astype(int):
+for lon_slice in np.linspace(1, 4, 4).astype(int):
 
     if lon_slice == 1: 
         lat_lon=[90, -90, 70, 80]
@@ -950,6 +950,8 @@ for lon_slice in np.linspace(1, 3, 3).astype(int):
         lat_lon=[-90, 90, 100, 105]  
     elif lon_slice == 3:
         lat_lon=[-90, 90, 120, 125] 
+    elif lon_slice == 4:
+        lat_lon=[-90, 90, 165, 180] 
 
 
 
