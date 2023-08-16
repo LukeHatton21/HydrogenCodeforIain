@@ -6,6 +6,7 @@ renewables_capacity,20000
 renew_op_cost,0.01
 percentage_wind, 1
 wind_capex, 1500
+solar_capex, 990
 land_foundations, 115
 renew_discount_rate,0.10
 lifetime, 20
