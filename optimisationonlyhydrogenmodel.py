@@ -680,8 +680,8 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores =  5 #  # Use all available CPU cores
-        parallel_results = Parallel(n_jobs=num_cores, verbose=100)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
+        num_cores =  24 #  # Use all available CPU cores
+        parallel_results = Parallel(n_jobs=num_cores, verbose=10)(delayed(self.process_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         
         
         # Extract results
@@ -755,7 +755,7 @@ class HydrogenModel:
                 grid_point_args.append((lat, lon))
     
         # Use joblib to parallelize the processing of grid points
-        num_cores = 6  # Use all available CPU cores
+        num_cores = 24  # Use all available CPU cores
         parallel_results = Parallel(n_jobs=num_cores, verbose=10)(delayed(self.levelised_cost_grid_point)(lat=lat, lon=lon) for lat, lon in grid_point_args)
         print("Parallel processing completed")
         
