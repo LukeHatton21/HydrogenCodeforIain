@@ -427,9 +427,10 @@ class Economic_Profile:
         
 
     def calculate_electrolyser_capex(self, geodata, capacity=None):
-        "Calculates the capital cost associated with the electrolyser, doubling the capital cost for offshore locations"
+        "Calculates the capital cost associated with the electrolyser, 1.5x the capital cost for offshore locations"
         # Get offshore mask
         offshore_mask = geodata['offshore']
+        landmask = geodata['land']
         
         # Check if capacity is specified, otherwise use default
         if capacity is not None:
@@ -438,7 +439,8 @@ class Economic_Profile:
             electrolyser_capacity = self.electrolyser_capacity
         
         # Adjust capital expenditure for electrolyser when offshore
-        capex_adjustment = xr.where(offshore_mask == True, 1.5, 1)
+        #capex_adjustment = xr.where(offshore_mask == True, 1.5, 1)
+        capex_adjustment = xr.where(np.isnan(landmask) == True, 1.5, 1)
         
         # Calculate locational capital expenditure relating to the electrolyser
         capital_cost = capex_adjustment * self.elec_capex * electrolyser_capacity
