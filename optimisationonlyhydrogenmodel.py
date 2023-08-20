@@ -1088,7 +1088,7 @@ for i in np.linspace(0, 17, 18).astype(int):
         combined_results = model.global_optimisation_parallelised()
         print("SciPy BasinHopping Calculation Finished running")
             #model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
-        filename = "SolarOptimisedResults_" + str(lat_lon[2]) + '_' + str(lat_lon[3])
+        filename = "FixedSolarOptimisedResults_" + str(lat_lon[2]) + '_' + str(lat_lon[3])
         model.save_results(output_folder, combined_results, filename)
                 #opt_levelised_costs = combined_results['levelised_cost']
                 #opt_annual_production = combined_results['hydrogen_production']
