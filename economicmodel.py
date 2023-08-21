@@ -4,7 +4,7 @@ import glob
 import pandas as pd
 import pvlib
 import matplotlib.pyplot as plt
-# import cartopy.crs as ccrs
+#import cartopy.crs as ccrs
 
 
 
@@ -59,8 +59,12 @@ class Economic_Profile:
         
         if elec_op_cost is not None:
             self.elec_op_cost = elec_op_cost
-
+        
             
+
+    
+    
+    
 
     def get_foundation_cost(self, geodata):
         """ Method to calculate the foundation cost for the wind turbine based on the depth of water, 
@@ -360,7 +364,7 @@ class Economic_Profile:
         wind_turbine_costs = self.wind_capex * self.renewables_capacity * self.percentage_wind
         transmission_costs = transmission_costs_unit * self.renewables_capacity * self.percentage_wind
         total_costs = foundation_costs + transmission_costs + wind_turbine_costs
-        # self.plot_data(total_costs, "Total Capital Costs")
+        self.plot_data(total_costs, "Total Capital Costs")
 
         # Save a capital cost for each location (lat/lon) and return this for use in the calculations
         data_vars = {'total capital costs': total_costs, 'foundation costs': foundation_costs, 
@@ -388,63 +392,6 @@ class Economic_Profile:
         
         
         
-      
-
-    def calculate_yearly_costs_using_depths(self, renewables_profile, geodata):
-        "Calculates the yearly cost using cost relationships with water depth and distance to shore"
-        
-        # Read in the renewables_profile
-        renewables_data_total = renewables_profile
-        renewables_data_yearly = renewables_data_total.groupby('time.year').sum(dim='time')
-        
-        # Extract dimensions from the renewables_profile
-        years = renewables_data_yearly.year
-        latitudes = renewables_data_yearly.latitude
-        longitudes = renewables_data_yearly.longitude
-
-        # Need to account for CAPEX only in the 0th year
-        lat_len = len(latitudes)
-        lon_len = len(longitudes)
-        years_len = len(years)
-        new_year = [years[0]-1]
-        years_appended = np.concatenate((new_year, years))
-        zero_array = np.zeros((1, int(lat_len), int(lon_len)))
-
-        
-        # Create new arrays for storage
-        renewables_array = xr.DataArray(renewables_data_yearly, dims=('year', 'latitude', 'longitude'),
-                                        coords={'year': years,
-                                                'latitude': latitudes,
-                                                'longitude': longitudes})
-        capital_costs_array = xr.DataArray(zero_array, dims=('year', 'latitude', 'longitude'),
-                                        coords={'year': new_year,
-                                                'latitude': latitudes,
-                                                 'longitude': longitudes})
-        # Calculate capital costs using depth
-        costs_with_depth = self.calculate_capital_depth_distance(geodata)
-        costs_with_config = self.configuration_analysis(geodata)
-        
-        
-        # Transfer capital costs across to the capital costs array
-        capital_costs = costs_with_config["minimum capital costs"]
-        capital_costs_selected = capital_costs.sel(latitude=capital_costs_array.coords['latitude'],
-                                                                  longitude=capital_costs_array.coords['longitude'])
-        capital_costs_array[0, :, :] = capital_costs_selected #capital_costs_depth_selected  
-        operating_costs_array = xr.DataArray(self.locational_operating_costs(capital_costs_selected, renewables_data_yearly, 'Renew'), dims=('year', 'latitude', 'longitude'), coords={'year': years,'latitude': latitudes,'longitude': longitudes})
-        
-        
-        # Combine arrays to include zeroth year
-        total_costs_array = xr.concat([capital_costs_array, operating_costs_array], dim = 'year')
-        renewables_array = xr.concat([capital_costs_array * 0, renewables_array], dim = 'year')
-        
-        # Create a dataset with all the arrays
-        data_vars = {'renewable_electricity': renewables_array,
-                     'costs': total_costs_array, }
-        coords = {'year': years_appended,
-                  'latitude': latitudes,
-                  'longitude': longitudes}
-        ds = xr.Dataset(data_vars=data_vars, coords=coords)
-        return ds
     
     
     def plot_data(self, data, name):
@@ -480,9 +427,10 @@ class Economic_Profile:
         
 
     def calculate_electrolyser_capex(self, geodata, capacity=None):
-        "Calculates the capital cost associated with the electrolyser, doubling the capital cost for offshore locations"
+        "Calculates the capital cost associated with the electrolyser, 1.5x the capital cost for offshore locations"
         # Get offshore mask
         offshore_mask = geodata['offshore']
+        landmask = geodata['land']
         
         # Check if capacity is specified, otherwise use default
         if capacity is not None:
@@ -491,7 +439,8 @@ class Economic_Profile:
             electrolyser_capacity = self.electrolyser_capacity
         
         # Adjust capital expenditure for electrolyser when offshore
-        capex_adjustment = xr.where(offshore_mask == True, 1.5, 1)
+        #capex_adjustment = xr.where(offshore_mask == True, 1.5, 1)
+        capex_adjustment = xr.where(np.isnan(landmask) == True, 1.5, 1)
         
         # Calculate locational capital expenditure relating to the electrolyser
         capital_cost = capex_adjustment * self.elec_capex * electrolyser_capacity
@@ -540,6 +489,78 @@ class Economic_Profile:
         renew_config_costs = self.configuration_analysis(geodata)
         renew_capital_costs = renew_config_costs["minimum capital costs"]
         offshore_config = renew_config_costs["minimum cost configuration"]
+        
+        # Calculate electrolyser capital costs
+        elec_capital_costs = self.calculate_electrolyser_capex(geodata, capacity)
+        
+        # Transfer capital costs across to the relevant cost arrays
+        elec_costs_array[0, :, :] = elec_capital_costs
+        renew_costs_array[0, :, :] = renew_capital_costs
+        
+        # Calculate the operating costs 
+        renew_op_costs_array = xr.DataArray(self.locational_operating_costs(renew_capital_costs, renewables_data_yearly, 'Renew'), dims=('year', 'latitude', 'longitude'), coords={'year': years,'latitude': latitudes,'longitude': longitudes})
+        elec_op_costs_array = xr.DataArray(self.locational_operating_costs(elec_capital_costs, renewables_data_yearly, 'Elec'), dims=('year', 'latitude', 'longitude'), coords={'year': years,'latitude': latitudes,'longitude': longitudes})
+
+        
+        # Combine capital and operating cost arrays
+        renew_costs_combined = xr.concat([renew_costs_array, renew_op_costs_array], dim='year')
+        elec_costs_combined = xr.concat([elec_costs_array, elec_op_costs_array], dim = 'year')
+        total_costs_array = elec_costs_combined + renew_costs_combined
+        renewables_array = xr.concat([renew_costs_array * 0, renewables_array], dim = 'year')
+
+        
+        # Create a dataset with all the arrays
+        data_vars = {'renewable_electricity': renewables_array,
+                     'renewable costs': renew_costs_array,
+                     'electrolyser costs': elec_costs_array,
+                     'total costs': total_costs_array,
+                     'configuration': offshore_config}
+        coords = {'year': years_appended,
+                  'latitude': latitudes,
+                  'longitude': longitudes}
+        yearly_costs = xr.Dataset(data_vars=data_vars, coords=coords)
+        return yearly_costs
+    
+    
+    def calculate_solar_capital_costs(self, renewables_profile, geodata, capacity=None):
+        "Calculates the yearly cost for both solar and the electrolyser components"
+        
+        # Read in the renewables_profile
+        renewables_data_total = renewables_profile
+        renewables_data_yearly = renewables_data_total.groupby('time.year').sum(dim='time')
+        
+        # Extract dimensions from the renewables_profile
+        years = renewables_data_yearly.year
+        latitudes = renewables_data_yearly.latitude
+        longitudes = renewables_data_yearly.longitude
+
+        # Need to account for CAPEX only in the 0th year
+        lat_len = len(latitudes)
+        lon_len = len(longitudes)
+        years_len = len(years)
+        new_year = [years[0]-1]
+        years_appended = np.concatenate((new_year, years))
+        zero_array_renew = np.zeros((1, int(lat_len), int(lon_len)))
+        zero_array_elec = np.zeros((1, int(lat_len), int(lon_len)))
+        
+        # Create new arrays for storage
+        renewables_array = xr.DataArray(renewables_data_yearly, dims=('year', 'latitude', 'longitude'),
+                                        coords={'year': years,
+                                                'latitude': latitudes,
+                                                'longitude': longitudes})
+        renew_costs_array = xr.DataArray(zero_array_renew, dims=('year', 'latitude', 'longitude'),
+                                        coords={'year': new_year,
+                                                'latitude': latitudes,
+                                                 'longitude': longitudes})
+        elec_costs_array = xr.DataArray(zero_array_elec, dims=('year', 'latitude', 'longitude'),
+                                        coords={'year': new_year,
+                                                'latitude': latitudes,
+                                                 'longitude': longitudes})
+        
+        
+        # Calculate renewable capital costs using depth
+        renew_capital_costs = xr.ones_like(geodata['land']) + self.solar_capex * self.renewables_capacity
+        offshore_config = xr.zeros_like(geodata['land'])
         
         # Calculate electrolyser capital costs
         elec_capital_costs = self.calculate_electrolyser_capex(geodata, capacity)

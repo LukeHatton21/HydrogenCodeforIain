@@ -1037,6 +1037,17 @@ start_time = time.time()
 #### GLOBAL
 #lat_lon=[-90, 90, -180, 180]
 
+# Set up for loop to select each of the error-prone slices
+for lon_slice in np.linspace(1, 4, 4).astype(int):
+
+    if lon_slice == 1: 
+        lat_lon=[90, -90, 70, 80]
+    elif lon_slice == 2:
+        lat_lon=[-90, 90, 100, 105]  
+    elif lon_slice == 3:
+        lat_lon=[-90, 90, 120, 125] 
+    elif lon_slice == 4:
+        lat_lon=[-90, 90, 165, 180] 
 
 # Set up for loop for each individual slice of 5 latitudes within the error-prone slice
 for i in np.linspace(0, 17, 18).astype(int):
@@ -1088,7 +1099,7 @@ for i in np.linspace(0, 17, 18).astype(int):
         combined_results = model.global_optimisation_parallelised()
         print("SciPy BasinHopping Calculation Finished running")
             #model.save_results(output_folder, combined_results, "FullGlobeOptimisedResults")
-        filename = "FixedSolarOptimisedResults_" + str(lat_lon[2]) + '_' + str(lat_lon[3])
+        filename = "SolarOptimisedResults_" + str(lat_lon[2]) + '_' + str(lat_lon[3])
         model.save_results(output_folder, combined_results, filename)
                 #opt_levelised_costs = combined_results['levelised_cost']
                 #opt_annual_production = combined_results['hydrogen_production']
